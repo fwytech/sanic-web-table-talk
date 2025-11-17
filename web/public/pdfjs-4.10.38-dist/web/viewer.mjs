@@ -1,139 +1,355 @@
-/**
- * @licstart The following is the entire license notice for the
- * JavaScript code in this page
- *
- * Copyright 2024 Mozilla Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- * @licend The above is the entire license notice for the
- * JavaScript code in this page
- */
-
-/******/ // The require scope
-/******/ var __webpack_require__ = {};
-/******/
-/************************************************************************/
-/******/ /* webpack/runtime/define property getters */
-/******/ (() => {
-/******/ 	// define getter functions for harmony exports
-/******/ 	__webpack_require__.d = (exports, definition) => {
-/******/ 		for (var key in definition) {
-/******/ 			if (__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) {
-/******/ 				Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
-/******/        /******/
+2000→const TOKEN_BLANK = /\s+/y;
+class FluentResource {
+  constructor(source) {
+    this.body = [];
+    RE_MESSAGE_START.lastIndex = 0;
+    let cursor = 0;
+    while (true) {
+      let next = RE_MESSAGE_START.exec(source);
+      if (next === null) {
+        break;
+      }
+      cursor = RE_MESSAGE_START.lastIndex;
+      try {
+        this.body.push(parseMessage(next[1]));
+      } catch (err) {
+        if (err instanceof SyntaxError) {
+          continue;
+        }
+        throw err;
+      }
+    }
+    function test(re) {
+      re.lastIndex = cursor;
+      return re.test(source);
+    }
+    function consumeChar(char, errorClass) {
+      if (source[cursor] === char) {
+        cursor++;
+        return true;
+      }
+      if (errorClass) {
+        throw new errorClass(`Expected ${char}`);
+      }
+      return false;
+    }
+    function consumeToken(re, errorClass) {
+      if (test(re)) {
+        cursor = re.lastIndex;
+        return true;
+      }
+      if (errorClass) {
+        throw new errorClass(`Expected ${re.toString()}`);
+      }
+      return false;
+    }
+    function match(re) {
+      re.lastIndex = cursor;
+      let result = re.exec(source);
+      if (result === null) {
+        throw new SyntaxError(`Expected ${re.toString()}`);
+      }
+      cursor = re.lastIndex;
+      return result;
+    }
+    function match1(re) {
+      return match(re)[1];
+    }
+    function parseMessage(id) {
+      let value = parsePattern();
+      let attributes = parseAttributes();
+      if (value === null && Object.keys(attributes).length === 0) {
+        throw new SyntaxError("Expected message value or attributes");
+      }
+      return {
+        id,
+        value,
+        attributes
+      };
+    }
+    function parseAttributes() {
+      let attrs = Object.create(null);
+      while (test(RE_ATTRIBUTE_START)) {
+        let name = match1(RE_ATTRIBUTE_START);
+        let value = parsePattern();
+        if (value === null) {
+          throw new SyntaxError("Expected attribute value");
+        }
+        attrs[name] = value;
+      }
+      return attrs;
+    }
+    function parsePattern() {
+      let first;
+      if (test(RE_TEXT_RUN)) {
+        first = match1(RE_TEXT_RUN);
+      }
+      if (source[cursor] === "{" || source[cursor] === "}") {
+        return parsePatternElements(first ? [first] : [], Infinity);
+      }
+      let indent = parseIndent();
+      if (indent) {
+        if (first) {
+          return parsePatternElements([first, indent], indent.length);
+        }
+        indent.value = trim(indent.value, RE_LEADING_NEWLINES);
+        return parsePatternElements([indent], indent.length);
+      }
+      if (first) {
+        return trim(first, RE_TRAILING_SPACES);
+      }
+      return null;
+    }
+    function parsePatternElements(elements = [], commonIndent) {
+      while (true) {
+        if (test(RE_TEXT_RUN)) {
+          elements.push(match1(RE_TEXT_RUN));
+          continue;
+        }
+        if (source[cursor] === "{") {
+          elements.push(parsePlaceable());
+          continue;
+        }
+        if (source[cursor] === "}") {
+          throw new SyntaxError("Unbalanced closing brace");
+        }
+        let indent = parseIndent();
+        if (indent) {
+          elements.push(indent);
+          commonIndent = Math.min(commonIndent, indent.length);
+          continue;
+        }
+        break;
+      }
+      let lastIndex = elements.length - 1;
+      let lastElement = elements[lastIndex];
+      if (typeof lastElement === "string") {
+        elements[lastIndex] = trim(lastElement, RE_TRAILING_SPACES);
+      }
+      let baked = [];
+      for (let element of elements) {
+        if (element instanceof Indent) {
+          element = element.value.slice(0, element.value.length - commonIndent);
+        }
+        if (element) {
+          baked.push(element);
+        }
+      }
+      return baked;
+    }
+    function parsePlaceable() {
+      consumeToken(TOKEN_BRACE_OPEN, SyntaxError);
+      let selector = parseInlineExpression();
+      if (consumeToken(TOKEN_BRACE_CLOSE)) {
+        return selector;
+      }
+      if (consumeToken(TOKEN_ARROW)) {
+        let variants = parseVariants();
+        consumeToken(TOKEN_BRACE_CLOSE, SyntaxError);
+        return {
+          type: "select",
+          selector,
+          ...variants
+        };
+      }
+      throw new SyntaxError("Unclosed placeable");
+    }
+    function parseInlineExpression() {
+      if (source[cursor] === "{") {
+        return parsePlaceable();
+      }
+      if (test(RE_REFERENCE)) {
+        let [, sigil, name, attr = null] = match(RE_REFERENCE);
+        if (sigil === "$") {
+          return {
+            type: "var",
+            name
+          };
+        }
+        if (consumeToken(TOKEN_PAREN_OPEN)) {
+          let args = parseArguments();
+          if (sigil === "-") {
+            return {
+              type: "term",
+              name,
+              attr,
+              args
+            };
+          }
+          if (RE_FUNCTION_NAME.test(name)) {
+            return {
+              type: "func",
+              name,
+              args
+            };
+          }
+          throw new SyntaxError("Function names must be all upper-case");
+        }
+        if (sigil === "-") {
+          return {
+            type: "term",
+            name,
+            attr,
+            args: []
+          };
+        }
+        return {
+          type: "mesg",
+          name,
+          attr
+        };
+      }
+      return parseLiteral();
+    }
+    function parseArguments() {
+      let args = [];
+      while (true) {
+        switch (source[cursor]) {
+          case ")":
+            cursor++;
+            return args;
+          case undefined:
+            throw new SyntaxError("Unclosed argument list");
+        }
+        args.push(parseArgument());
+        consumeToken(TOKEN_COMMA);
+      }
+    }
+    function parseArgument() {
+      let expr = parseInlineExpression();
+      if (expr.type !== "mesg") {
+        return expr;
+      }
+      if (consumeToken(TOKEN_COLON)) {
+        return {
+          type: "narg",
+          name: expr.name,
+          value: parseLiteral()
+        };
+      }
+      return expr;
+    }
+    function parseVariants() {
+      let variants = [];
+      let count = 0;
+      let star;
+      while (test(RE_VARIANT_START)) {
+        if (consumeChar("*")) {
+          star = count;
+        }
+        let key = parseVariantKey();
+        let value = parsePattern();
+        if (value === null) {
+          throw new SyntaxError("Expected variant value");
+        }
+        variants[count++] = {
+          key,
+          value
+        };
+      }
+      if (count === 0) {
+        return null;
+      }
+      if (star === undefined) {
+        throw new SyntaxError("Expected default variant");
+      }
+      return {
+        variants,
+        star
+      };
+    }
+    function parseVariantKey() {
+      consumeToken(TOKEN_BRACKET_OPEN, SyntaxError);
+      let key;
+      if (test(RE_NUMBER_LITERAL)) {
+        key = parseNumberLiteral();
+      } else {
+        key = {
+          type: "str",
+          value: match1(RE_IDENTIFIER)
+        };
+      }
+      consumeToken(TOKEN_BRACKET_CLOSE, SyntaxError);
+      return key;
+    }
+    function parseLiteral() {
+      if (test(RE_NUMBER_LITERAL)) {
+        return parseNumberLiteral();
+      }
+      if (source[cursor] === '"') {
+        return parseStringLiteral();
+      }
+      throw new SyntaxError("Invalid expression");
+    }
+    function parseNumberLiteral() {
+      let [, value, fraction = ""] = match(RE_NUMBER_LITERAL);
+      let precision = fraction.length;
+      return {
+        type: "num",
+        value: parseFloat(value),
+        precision
+      };
+    }
+    function parseStringLiteral() {
+      consumeChar('"', SyntaxError);
+      let value = "";
+      while (true) {
+        value += match1(RE_STRING_RUN);
+        if (source[cursor] === "\\") {
+          value += parseEscapeSequence();
+          continue;
+        }
+        if (consumeChar('"')) {
+          return {
+            type: "str",
+            value
+          };
+        }
+        throw new SyntaxError("Unclosed string literal");
+      }
+    }
+    function parseEscapeSequence() {
+      if (test(RE_STRING_ESCAPE)) {
+        return match1(RE_STRING_ESCAPE);
+      }
+      if (test(RE_UNICODE_ESCAPE)) {
+        let [, codepoint4, codepoint6] = match(RE_UNICODE_ESCAPE);
+        let codepoint = parseInt(codepoint4 || codepoint6, 16);
+        return codepoint <= 0xd7ff || 0xe000 <= codepoint ? String.fromCodePoint(codepoint) : "�";
+      }
+      throw new SyntaxError("Unknown escape sequence");
+    }
+    function parseIndent() {
+      let start = cursor;
+      consumeToken(TOKEN_BLANK);
+      switch (source[cursor]) {
+        case ".":
+        case "[":
+        case "*":
+        case "}":
+        case undefined:
+          return false;
+        case "{":
+          return makeIndent(source.slice(start, cursor));
+      }
+      if (source[cursor - 1] === " ") {
+        return makeIndent(source.slice(start, cursor));
+      }
+      return false;
+    }
+    function trim(text, re) {
+      return text.replace(re, "");
+    }
+    function makeIndent(blank) {
+      let value = blank.replace(RE_BLANK_LINES, "\n");
+      let length = RE_INDENT.exec(blank)[1].length;
+      return new Indent(value, length);
+    }
+  }
 }
-      /******/
-}
-    /******/
-};
-  /******/
-})();
-/******/
-/******/ /* webpack/runtime/hasOwnProperty shorthand */
-/******/ (() => {
-/******/ 	__webpack_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
-  /******/
-})();
-/******/
-/************************************************************************/
-var __webpack_exports__ = {};
-
-// EXPORTS
-__webpack_require__.d(__webpack_exports__, {
-  PDFViewerApplication: () => (/* reexport */ PDFViewerApplication),
-  PDFViewerApplicationConstants: () => (/* binding */ AppConstants),
-  PDFViewerApplicationOptions: () => (/* reexport */ AppOptions)
-});
-
-;// ./web/ui_utils.js
-const DEFAULT_SCALE_VALUE = "auto";
-const DEFAULT_SCALE = 1.0;
-const DEFAULT_SCALE_DELTA = 1.1;
-const MIN_SCALE = 0.1;
-const MAX_SCALE = 10.0;
-const UNKNOWN_SCALE = 0;
-const MAX_AUTO_SCALE = 1.25;
-const SCROLLBAR_PADDING = 40;
-const VERTICAL_PADDING = 5;
-const RenderingStates = {
-  INITIAL: 0,
-  RUNNING: 1,
-  PAUSED: 2,
-  FINISHED: 3
-};
-const PresentationModeState = {
-  UNKNOWN: 0,
-  NORMAL: 1,
-  CHANGING: 2,
-  FULLSCREEN: 3
-};
-const SidebarView = {
-  UNKNOWN: -1,
-  NONE: 0,
-  THUMBS: 1,
-  OUTLINE: 2,
-  ATTACHMENTS: 3,
-  LAYERS: 4
-};
-const TextLayerMode = {
-  DISABLE: 0,
-  ENABLE: 1,
-  ENABLE_PERMISSIONS: 2
-};
-const ScrollMode = {
-  UNKNOWN: -1,
-  VERTICAL: 0,
-  HORIZONTAL: 1,
-  WRAPPED: 2,
-  PAGE: 3
-};
-const SpreadMode = {
-  UNKNOWN: -1,
-  NONE: 0,
-  ODD: 1,
-  EVEN: 2
-};
-const CursorTool = {
-  SELECT: 0,
-  HAND: 1,
-  ZOOM: 2
-};
-const AutoPrintRegExp = /\bprint\s*\(/;
-function scrollIntoView(element, spot, scrollMatches = false) {
-  let parent = element.offsetParent;
-  if (!parent) {
-    console.error("offsetParent is not set -- cannot scroll");
-    return;
+class Indent {
+  constructor(value, length) {
+    this.value = value;
+    this.length = length;
   }
-  let offsetY = element.offsetTop + element.clientTop;
-  let offsetX = element.offsetLeft + element.clientLeft;
-  while (parent.clientHeight === parent.scrollHeight && parent.clientWidth === parent.scrollWidth || scrollMatches && (parent.classList.contains("markedContent") || getComputedStyle(parent).overflow === "hidden")) {
-    offsetY += parent.offsetTop;
-    offsetX += parent.offsetLeft;
-    parent = parent.offsetParent;
-    if (!parent) {
-      return;
-    }
-  }
-  if (spot) {
-    if (spot.top !== undefined) {
-      offsetY += spot.top;
-    }
-    if (spot.left !== undefined) {
-      offsetX += spot.left;
-      parent.scrollLeft = offsetX;
-    }
-  }
-  parent.scrollTop = offsetY;
 }
