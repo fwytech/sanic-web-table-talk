@@ -1,5 +1,50 @@
 {
+  "name": "sanic-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "build:gh-pages": "cross-env VITE_ROUTER_MODE=hash pnpm build",
+    "preview": "vite preview --host",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "stylelint": "stylelint .scss, .vue ./src",
+    "stylelint:fix": "stylelint --fix .scss, .vue ./src"
+  },
+  "dependencies": {
+    "@vicons/ionicons5": "^0.12.0",
+    "@vueuse/core": "^10.11.0",
+    "axios": "^1.7.2",
+    "echarts": "^5.5.1",
+    "js-cookie": "^3.0.5",
+    "naive-ui": "^2.38.2",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.21",
+    "vue-echarts": "^6.6.1",
+    "vue-router": "^4.3.0"
+  },
   "devDependencies": {
-    "@antv/mcp-server-chart": "^0.9.4"
+    "@rushstack/eslint-patch": "^1.8.0",
+    "@tsconfig/node20": "^20.1.4",
+    "@types/js-cookie": "^3.0.6",
+    "@types/node": "^20.14.5",
+    "@vitejs/plugin-vue": "^5.0.4",
+    "@vue/eslint-config-prettier": "^9.0.0",
+    "@vue/eslint-config-typescript": "^13.0.0",
+    "@vue/tsconfig": "^0.5.1",
+    "cross-env": "^7.0.3",
+    "eslint": "^8.57.0",
+    "eslint-plugin-vue": "^9.23.0",
+    "prettier": "^3.2.5",
+    "sass": "^1.77.6",
+    "stylelint": "^16.6.1",
+    "stylelint-config-recommended-scss": "^14.0.0",
+    "stylelint-config-recommended-vue": "^1.5.0",
+    "typescript": "~5.4.0",
+    "unplugin-auto-import": "^0.17.6",
+    "vite": "^5.2.8",
+    "vue-tsc": "^2.0.11"
   }
 }
