@@ -1,0 +1,1 @@
+This directory contains Vue Router configuration files uploaded from local project.
