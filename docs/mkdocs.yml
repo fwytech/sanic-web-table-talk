@@ -1,0 +1,48 @@
+site_name: 大模型数据助手
+nav:
+    - 🏠 首页: index.md
+    - ⚙️ 环境配置: environment.md
+    - 🚀 快速体验: quick-start.md
+    - 🛠️ 本地开发: local-development.md
+    - ℹ️ 常见问题: faq.md
+
+# 代码仓库信息
+repo_name: apconw/sanic-web # 仓库名称
+repo_url: https://github.com/apconw/sanic-web
+
+
+theme:
+  name: material
+  language: en # 默认语言
+  features: # 功能
+    - announce.dismiss # 可以叉掉公告的功能
+    - content.action.edit # 编辑按钮，似乎没啥用
+    - content.action.view # 查看按钮，似乎没啥用
+    - content.code.annotate # 代码注释，具体不清楚
+    - content.code.copy # 复制代码按钮
+    - content.tooltips # 不太清楚呢这个
+    - navigation.top # 顶部导航栏
+    - navigation.expand # 默认展开导航栏
+
+
+plugins:
+  - tags
+  - blog
+  - search:
+      separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - i18n: # 多语言插件
+      docs_structure: suffix # 抄来的，不太懂
+      fallback_to_default: true # 抄来的，不太懂
+      reconfigure_material: true # 抄来的，不太懂
+      reconfigure_search: true # 抄来的，不太懂
+      languages: # 多语言配置 - 需要小心一点
+        - locale: en
+          default: true # 默认语言
+          name: English
+          build: true # 是否构建
+        - locale: zh
+          name: 简体中文
+          nav_translations: # 导航栏翻译，不可以有缩进
+
+  # 版权信息
+copyright: Copyright &copy; 2025 apconw
