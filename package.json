@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "@antv/mcp-server-chart": "^0.9.4"
+  }
+}
